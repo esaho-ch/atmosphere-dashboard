@@ -1,0 +1,33 @@
+{
+  "ca_cible": 700000,
+  "materiel_max_ratio": 0.6,
+  "salaires": {
+    "personnel_fixe": 91000,
+    "personnel_interimaire": 0,
+    "personnel_administratif": 0,
+    "charges_avs_ai_apg_ac": 10393,
+    "prevoyance_professionnelle": 9100,
+    "assurance_accident": 1820,
+    "assurance_maladie": 910
+  },
+  "charges_fixes": {
+    "loyer": 32000,
+    "electricite": 600,
+    "garantie_loyer": 600,
+    "assurances": 2000,
+    "leasing": 10500,
+    "part_privee": -2400,
+    "assurances_vehicules": 0,
+    "essence": 5000,
+    "service": 0,
+    "secretariat": 500,
+    "telephone_internet": 900,
+    "materiel_informatique": 8000,
+    "comptabilite_honoraires": 10000,
+    "site_internet": 2500,
+    "marketing": 10000,
+    "interets_banque": 6000,
+    "impots": 10440.78,
+    "amortissement": 6000
+  }
+}
