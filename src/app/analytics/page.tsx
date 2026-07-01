@@ -1,8 +1,11 @@
-import { fetchOrders, fetchInvoices, fetchContact, fetchArticleGroups, fetchOrderPositions, fetchArticle, BexioOrder, BexioInvoice } from "@/lib/bexio";
+import { fetchOrders, fetchInvoices, fetchContact, fetchArticleGroups, BexioOrder, BexioInvoice } from "@/lib/bexio";
 import { cookies } from "next/headers";
 import { verifySession } from "@/lib/session";
 import Link from "next/link";
 import { ChevronLeft, LogOut, Settings } from "lucide-react";
+import PaymentDonut from "@/components/charts/PaymentDonut";
+import ClientGroupsBar from "@/components/charts/ClientGroupsBar";
+import ComparisonBar from "@/components/charts/ComparisonBar";
 
 const CHF = (n: number) =>
   "CHF " + Math.round(n).toLocaleString("fr-CH").replace(/\s/g, "'");
@@ -267,70 +270,86 @@ export default async function AnalyticsPage({
                 <StatCard label="Montant encaissé" value={CHF(data.paidHT)} sub={`${((data.paidHT / data.totalInvoicesHT) * 100).toFixed(1)}% du facturé`} accent="emerald" />
                 <StatCard label="Solde non encaissé" value={CHF(data.unpaidHT)} sub="En suspens + partiel" accent={data.unpaidHT > 50000 ? "red" : "slate"} />
               </div>
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                <table className="w-full text-sm">
-                  <thead className="border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wide">
-                    <tr>
-                      <th className="text-left px-5 py-3 font-semibold">Statut des factures</th>
-                      <th className="text-right px-5 py-3 font-semibold">Montant HT</th>
-                      <th className="text-right px-5 py-3 font-semibold">Documents</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {Object.entries(data.statusGroups).map(([label, { amount, count }]) => (
-                      <tr key={label} className="border-b border-slate-50 last:border-0">
-                        <td className="px-5 py-3 text-slate-700">{label}</td>
-                        <td className="px-5 py-3 text-right font-bold text-slate-900 tabular-nums">{CHF(amount)}</td>
-                        <td className="px-5 py-3 text-right text-slate-500">{count}</td>
+              <div className="grid grid-cols-5 gap-4">
+                <div className="col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wide">
+                      <tr>
+                        <th className="text-left px-5 py-3 font-semibold">Statut des factures</th>
+                        <th className="text-right px-5 py-3 font-semibold">Montant HT</th>
+                        <th className="text-right px-5 py-3 font-semibold">Documents</th>
                       </tr>
-                    ))}
-                    <tr className="bg-slate-50 border-t border-slate-200">
-                      <td className="px-5 py-3 text-slate-500 text-xs">Écart ordres › factures (non encore facturé)</td>
-                      <td className="px-5 py-3 text-right font-bold text-slate-700 tabular-nums">{CHF(data.ecartOrdresFactures)}</td>
-                      <td />
-                    </tr>
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {Object.entries(data.statusGroups).map(([label, { amount, count }]) => (
+                        <tr key={label} className="border-b border-slate-50 last:border-0">
+                          <td className="px-5 py-3 text-slate-700">{label}</td>
+                          <td className="px-5 py-3 text-right font-bold text-slate-900 tabular-nums">{CHF(amount)}</td>
+                          <td className="px-5 py-3 text-right text-slate-500">{count}</td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-50 border-t border-slate-200">
+                        <td className="px-5 py-3 text-slate-500 text-xs">Écart ordres › factures (non encore facturé)</td>
+                        <td className="px-5 py-3 text-right font-bold text-slate-700 tabular-nums">{CHF(data.ecartOrdresFactures)}</td>
+                        <td />
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-5 pt-4 pb-1">Répartition des paiements</p>
+                  <div className="flex-1 px-2 pb-3">
+                    <PaymentDonut data={Object.entries(data.statusGroups).map(([label, { amount }]) => ({ label, amount }))} />
+                  </div>
+                </div>
               </div>
             </section>
 
             {/* 2. Groupes clients */}
             <section>
               <SectionTitle num="2" title={`Répartition par groupe client — ${data.year}`} />
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-                <table className="w-full text-sm">
-                  <thead className="border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wide">
-                    <tr>
-                      <th className="text-left px-5 py-3 font-semibold w-8">#</th>
-                      <th className="text-left px-5 py-3 font-semibold">Groupe</th>
-                      <th className="text-right px-5 py-3 font-semibold">CA HT</th>
-                      <th className="text-right px-5 py-3 font-semibold w-56">Part</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.clientGroupsSorted.map((g, i) => (
-                      <tr key={g.name} className="border-b border-slate-50 last:border-0">
-                        <td className="px-5 py-3 text-slate-300 text-xs font-mono">{i + 1}</td>
-                        <td className="px-5 py-3 font-medium text-slate-900">{g.name}</td>
-                        <td className="px-5 py-3 text-right font-bold text-slate-900 tabular-nums">{CHF(g.total)}</td>
-                        <td className="px-5 py-3">
-                          <div className="flex items-center justify-end gap-2">
-                            <div className="w-28 bg-slate-100 rounded-full h-1.5 overflow-hidden">
-                              <div className="bg-slate-700 h-1.5 rounded-full" style={{ width: `${g.pct * 100}%` }} />
-                            </div>
-                            <span className="text-slate-600 font-semibold tabular-nums w-12 text-right text-xs">{(g.pct * 100).toFixed(1)}%</span>
-                          </div>
-                        </td>
+              <div className="grid grid-cols-5 gap-4">
+                <div className="col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wide">
+                      <tr>
+                        <th className="text-left px-5 py-3 font-semibold w-8">#</th>
+                        <th className="text-left px-5 py-3 font-semibold">Groupe</th>
+                        <th className="text-right px-5 py-3 font-semibold">CA HT</th>
+                        <th className="text-right px-5 py-3 font-semibold w-48">Part</th>
                       </tr>
-                    ))}
-                    <tr className="bg-slate-50 border-t border-slate-200">
-                      <td className="px-5 py-3" />
-                      <td className="px-5 py-3 text-slate-500 font-semibold text-xs uppercase tracking-wide">Total</td>
-                      <td className="px-5 py-3 text-right font-bold text-slate-900 tabular-nums">{CHF(data.totalOrdersHT)}</td>
-                      <td className="px-5 py-3 text-right text-slate-500 font-semibold text-xs">100%</td>
-                    </tr>
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {data.clientGroupsSorted.map((g, i) => (
+                        <tr key={g.name} className="border-b border-slate-50 last:border-0">
+                          <td className="px-5 py-3 text-slate-300 text-xs font-mono">{i + 1}</td>
+                          <td className="px-5 py-3 font-medium text-slate-900">{g.name}</td>
+                          <td className="px-5 py-3 text-right font-bold text-slate-900 tabular-nums">{CHF(g.total)}</td>
+                          <td className="px-5 py-3">
+                            <div className="flex items-center justify-end gap-2">
+                              <div className="w-24 bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                                <div className="bg-slate-700 h-1.5 rounded-full" style={{ width: `${g.pct * 100}%` }} />
+                              </div>
+                              <span className="text-slate-600 font-semibold tabular-nums w-10 text-right text-xs">{(g.pct * 100).toFixed(1)}%</span>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="bg-slate-50 border-t border-slate-200">
+                        <td className="px-5 py-3" />
+                        <td className="px-5 py-3 text-slate-500 font-semibold text-xs uppercase tracking-wide">Total</td>
+                        <td className="px-5 py-3 text-right font-bold text-slate-900 tabular-nums">{CHF(data.totalOrdersHT)}</td>
+                        <td className="px-5 py-3 text-right text-slate-500 font-semibold text-xs">100%</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                <div className="col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-5 pt-4 pb-1">CA par groupe (CHF HT)</p>
+                  <div className="flex-1 px-2 pb-3">
+                    <ClientGroupsBar data={data.clientGroupsSorted} />
+                  </div>
+                </div>
               </div>
             </section>
 
@@ -341,34 +360,53 @@ export default async function AnalyticsPage({
                 title={`Comparaison ${data.comparison.period} : ${data.comparison.prevYear} vs ${data.comparison.curYear}`}
                 sub="Même période calendaire, toutes offres incluses"
               />
-              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm mb-3">
-                <table className="w-full text-sm">
-                  <thead className="border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wide">
-                    <tr>
-                      <th className="text-left px-5 py-3 font-semibold">Indicateur</th>
-                      <th className="text-right px-5 py-3 font-semibold">{data.comparison.prevYear}</th>
-                      <th className="text-right px-5 py-3 font-semibold">{data.comparison.curYear}</th>
-                      <th className="text-right px-5 py-3 font-semibold">Évolution</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {[
-                      { label: "Total ordres (HT)", prev: data.comparison.prevOrdTotal, cur: data.comparison.curOrdTotal },
-                      { label: "Total factures (HT)", prev: data.comparison.prevInvTotal, cur: data.comparison.curInvTotal },
-                      { label: "Montant encaissé (HT)", prev: data.comparison.prevPaid, cur: data.comparison.curPaid },
-                      { label: "Solde non encaissé", prev: data.comparison.prevUnpaid, cur: data.comparison.curUnpaid },
-                    ].map(({ label, prev, cur }) => (
-                      <tr key={label} className="border-b border-slate-50 last:border-0">
-                        <td className="px-5 py-3 text-slate-700">{label}</td>
-                        <td className="px-5 py-3 text-right text-slate-500 tabular-nums">{CHF(prev)}</td>
-                        <td className="px-5 py-3 text-right font-bold text-slate-900 tabular-nums">{CHF(cur)}</td>
-                        <td className="px-5 py-3 text-right">
-                          {prev > 0 ? <DeltaBadge prev={prev} cur={cur} /> : <span className="text-xs text-slate-300">-</span>}
-                        </td>
+              <div className="grid grid-cols-5 gap-4 mb-4">
+                <div className="col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                  <table className="w-full text-sm">
+                    <thead className="border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wide">
+                      <tr>
+                        <th className="text-left px-5 py-3 font-semibold">Indicateur</th>
+                        <th className="text-right px-5 py-3 font-semibold">{data.comparison.prevYear}</th>
+                        <th className="text-right px-5 py-3 font-semibold">{data.comparison.curYear}</th>
+                        <th className="text-right px-5 py-3 font-semibold">Évolution</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
+                    </thead>
+                    <tbody>
+                      {[
+                        { label: "Total ordres (HT)", prev: data.comparison.prevOrdTotal, cur: data.comparison.curOrdTotal },
+                        { label: "Total factures (HT)", prev: data.comparison.prevInvTotal, cur: data.comparison.curInvTotal },
+                        { label: "Montant encaissé (HT)", prev: data.comparison.prevPaid, cur: data.comparison.curPaid },
+                        { label: "Solde non encaissé", prev: data.comparison.prevUnpaid, cur: data.comparison.curUnpaid },
+                      ].map(({ label, prev, cur }) => (
+                        <tr key={label} className="border-b border-slate-50 last:border-0">
+                          <td className="px-5 py-3 text-slate-700">{label}</td>
+                          <td className="px-5 py-3 text-right text-slate-500 tabular-nums">{CHF(prev)}</td>
+                          <td className="px-5 py-3 text-right font-bold text-slate-900 tabular-nums">{CHF(cur)}</td>
+                          <td className="px-5 py-3 text-right">
+                            {prev > 0 ? <DeltaBadge prev={prev} cur={cur} /> : <span className="text-xs text-slate-300">-</span>}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <div className="col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-5 pt-4 pb-1">
+                    {data.comparison.prevYear} vs {data.comparison.curYear}
+                  </p>
+                  <div className="flex-1 px-2 pb-3">
+                    <ComparisonBar
+                      prevYear={data.comparison.prevYear}
+                      curYear={data.comparison.curYear}
+                      data={[
+                        { label: "Total ordres (HT)", prev: data.comparison.prevOrdTotal, cur: data.comparison.curOrdTotal },
+                        { label: "Total factures (HT)", prev: data.comparison.prevInvTotal, cur: data.comparison.curInvTotal },
+                        { label: "Montant encaissé (HT)", prev: data.comparison.prevPaid, cur: data.comparison.curPaid },
+                        { label: "Solde non encaissé", prev: data.comparison.prevUnpaid, cur: data.comparison.curUnpaid },
+                      ]}
+                    />
+                  </div>
+                </div>
               </div>
 
               <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">

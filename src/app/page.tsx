@@ -4,6 +4,8 @@ import { cookies } from "next/headers";
 import { LogOut, BarChart2, Settings } from "lucide-react";
 import Link from "next/link";
 import QuoteRow from "@/components/QuoteRow";
+import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 const PAGE_SIZE = 25;
 const CURRENT_YEAR = new Date().getFullYear();
@@ -57,27 +59,27 @@ export default async function HomePage({
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">Atmosphere</h1>
-            <p className="text-xs text-slate-400 font-medium tracking-wide uppercase">Dashboard Marges</p>
-          </div>
+      <header className="bg-white border-b border-slate-200 px-8 py-3 flex items-center justify-between">
+        <div>
+          <h1 className="text-base font-semibold text-slate-900 leading-tight">Atmosphere</h1>
+          <p className="text-xs text-slate-400">Dashboard Marges</p>
         </div>
         <nav className="flex items-center gap-1">
           {session?.name && (
-            <span className="text-xs text-slate-400 mr-3 border-r border-slate-200 pr-3">{session.name}</span>
+            <>
+              <span className="text-xs text-slate-400 px-2">{session.name}</span>
+              <div className="w-px h-4 bg-slate-200 mx-1" />
+            </>
           )}
-          <a href="/analytics" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md px-3 py-1.5 transition-colors">
-            <BarChart2 size={14} /> Analyse
+          <a href="/analytics" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+            <BarChart2 size={14} />Analyse
           </a>
-          <a href="/settings" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md px-3 py-1.5 transition-colors">
-            <Settings size={14} /> Paramètres
+          <a href="/settings" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm font-medium text-slate-600 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+            <Settings size={14} />Paramètres
           </a>
           <div className="w-px h-4 bg-slate-200 mx-1" />
-          <a href="/api/auth/logout" className="inline-flex items-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors p-1.5 rounded-md" title="Déconnexion">
-            <LogOut size={16} />
+          <a href="/api/auth/logout" title="Déconnexion" className="inline-flex items-center justify-center size-8 rounded-md text-slate-400 hover:bg-slate-100 hover:text-slate-600 transition-colors">
+            <LogOut size={15} />
           </a>
         </nav>
       </header>
@@ -89,21 +91,12 @@ export default async function HomePage({
           </div>
         )}
 
-        {/* Toolbar */}
         <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1">
             {YEARS.map((y) => (
-              <Link
-                key={y}
-                href={buildUrl(y, 1)}
-                className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                  y === year
-                    ? "bg-slate-900 text-white"
-                    : "text-slate-600 hover:bg-slate-200"
-                }`}
-              >
+              <Button key={y} variant={y === year ? "default" : "ghost"} size="sm" render={<Link href={buildUrl(y, 1)} />}>
                 {y}
-              </Link>
+              </Button>
             ))}
           </div>
           <span className="text-xs text-slate-400">
@@ -111,9 +104,8 @@ export default async function HomePage({
           </span>
         </div>
 
-        {/* Table */}
         <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
-          <div className="grid grid-cols-7 gap-4 px-6 py-2.5 border-b border-slate-100 text-xs font-semibold text-slate-400 uppercase tracking-wider">
+          <div className="grid grid-cols-7 gap-4 px-6 py-2.5 border-b border-slate-100 bg-slate-50 text-xs font-semibold text-slate-400 uppercase tracking-wider">
             <div>N° Offre</div>
             <div className="col-span-2">Client</div>
             <div>Date</div>
@@ -128,23 +120,20 @@ export default async function HomePage({
             </div>
           )}
 
-          {quotes.map((q: any) => (
-            <QuoteRow key={q.id} quote={q} />
-          ))}
+          {quotes.map((q: any) => <QuoteRow key={q.id} quote={q} />)}
         </div>
 
-        {/* Pagination */}
         {(page > 1 || hasMore) && (
-          <div className="flex items-center justify-end gap-2 mt-4">
+          <div className="flex justify-end gap-2 mt-4">
             {page > 1 && (
-              <Link href={buildUrl(year, page - 1)} className="px-4 py-2 text-sm font-medium bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm">
+              <Button variant="outline" size="sm" render={<Link href={buildUrl(year, page - 1)} />}>
                 ← Précédent
-              </Link>
+              </Button>
             )}
             {hasMore && (
-              <Link href={buildUrl(year, page + 1)} className="px-4 py-2 text-sm font-medium bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 transition-colors shadow-sm">
+              <Button variant="outline" size="sm" render={<Link href={buildUrl(year, page + 1)} />}>
                 Suivant →
-              </Link>
+              </Button>
             )}
           </div>
         )}
