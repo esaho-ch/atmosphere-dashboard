@@ -1,18 +1,18 @@
-import { fetchQuotes, fetchContact, calculateMargins, getMaterialCostForQuote, getMarginTargets } from "@/lib/bexio";
+import { fetchQuote, fetchContact, calculateMargins, getMaterialCostForQuote, getMarginTargets } from "@/lib/bexio";
 import MarginBadge from "@/components/MarginBadge";
 import Link from "next/link";
+import { ChevronLeft } from "lucide-react";
+import { getMarginLevel, marginClasses } from "@/lib/marginColor";
 
 interface Props {
   params: Promise<{ id: string }>;
 }
 
 async function getQuoteDetail(id: number) {
-  const [allQuotes, { positions, materialCost }] = await Promise.all([
-    fetchQuotes(),
+  const [quote, { positions, materialCost }] = await Promise.all([
+    fetchQuote(id),
     getMaterialCostForQuote(id),
   ]);
-  const quote = allQuotes.find((q) => q.id === id);
-  if (!quote) throw new Error("Offre introuvable");
 
   let contactName = "";
   try {
@@ -25,6 +25,10 @@ async function getQuoteDetail(id: number) {
 
   return { quote: { ...quote, contact_name: contactName }, positions, margins };
 }
+
+const STATUS_LABELS: Record<number, string> = {
+  1: "Brouillon", 2: "En attente", 3: "Confirmée", 4: "Refusée", 5: "Annulée",
+};
 
 export default async function QuoteDetailPage({ params }: Props) {
   const { id: idStr } = await params;
@@ -40,8 +44,8 @@ export default async function QuoteDetailPage({ params }: Props) {
 
   if (error) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        <Link href="/" className="text-blue-600 text-sm">← Retour</Link>
+      <div className="min-h-screen bg-slate-50 p-8">
+        <Link href="/" className="inline-flex items-center gap-1 text-blue-600 text-sm"><ChevronLeft size={14} />Retour</Link>
         <div className="mt-4 text-red-600">{error}</div>
       </div>
     );
@@ -50,158 +54,151 @@ export default async function QuoteDetailPage({ params }: Props) {
   const { quote, positions, margins } = data;
   const MARGIN_TARGETS = getMarginTargets();
   const fmt = (n: number) => n.toLocaleString("fr-CH", { style: "currency", currency: "CHF" });
+  const fmtShort = (n: number) => n.toLocaleString("fr-CH", { style: "currency", currency: "CHF", maximumFractionDigits: 0 });
+  const statusLabel = STATUS_LABELS[quote.kb_item_status_id] ?? "-";
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="bg-white border-b border-gray-200 px-8 py-5">
-        <Link href="/" className="text-blue-600 text-sm hover:underline">← Toutes les offres</Link>
-        <h1 className="text-xl font-bold text-gray-900 mt-2">
-          Offre {quote.document_nr} — {quote.contact_name || "Client inconnu"}
-        </h1>
-        <p className="text-sm text-gray-700">{quote.is_valid_from}</p>
+    <div className="min-h-screen bg-slate-50">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-200 px-8 py-4">
+        <Link href="/" className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800 text-sm transition-colors">
+          <ChevronLeft size={14} />Toutes les offres
+        </Link>
+        <div className="flex items-start justify-between mt-2">
+          <div>
+            <h1 className="text-xl font-bold text-slate-900">
+              {quote.document_nr}
+              <span className="text-slate-400 font-normal mx-2">·</span>
+              <span className="font-semibold">{quote.contact_name || "Client inconnu"}</span>
+            </h1>
+            <p className="text-sm text-slate-400 mt-0.5">
+              {quote.is_valid_from?.split("-").reverse().join("/")}
+              <span className="mx-2">·</span>
+              <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded ${
+                quote.kb_item_status_id === 3 ? "bg-emerald-50 text-emerald-700" :
+                quote.kb_item_status_id === 4 ? "bg-red-50 text-red-600" :
+                "bg-slate-100 text-slate-500"
+              }`}>{statusLabel}</span>
+            </p>
+          </div>
+          <div className="text-right">
+            <div className="text-2xl font-bold text-slate-900 tabular-nums">{fmtShort(margins.totalHT)}</div>
+            <div className="text-sm text-slate-400">HT · {fmtShort(margins.totalTTC)} TTC</div>
+          </div>
+        </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-8 py-8 space-y-8">
+      <main className="max-w-5xl mx-auto px-8 py-6 space-y-6">
+
         {/* Résumé financier */}
-        <div className="bg-white rounded-xl border border-gray-200 p-6">
-          <h2 className="text-base font-semibold text-gray-900 mb-4">Résumé financier</h2>
-          <div className="grid grid-cols-3 gap-6 text-sm">
-            <div>
-              <div className="text-sm font-medium text-gray-500">CA TTC</div>
-              <div className="text-xl font-bold text-gray-900">{fmt(margins.totalTTC)}</div>
-            </div>
-            <div>
-              <div className="text-sm font-medium text-gray-500">TVA ({fmt(margins.tvaAmount)})</div>
-              <div className="text-xl font-bold text-gray-900">{fmt(margins.totalHT)} HT</div>
-            </div>
-            <div>
-              <div className="text-sm font-medium text-gray-500">Coût matériel (prix d'achat)</div>
-              <div className={`text-xl font-bold ${margins.materialRatio > MARGIN_TARGETS.material_max ? "text-red-600" : "text-green-600"}`}>
-                {fmt(margins.materialCost)}
-                {margins.materialCost > 0 && (
-                  <span className="text-sm ml-2 font-normal">
-                    ({(margins.materialRatio * 100).toFixed(1)}% du HT)
-                  </span>
-                )}
+        <div className="grid grid-cols-3 gap-4">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">CA TTC</div>
+            <div className="text-xl font-bold text-slate-900 tabular-nums">{fmt(margins.totalTTC)}</div>
+            <div className="text-xs text-slate-400 mt-1">dont TVA {fmt(margins.tvaAmount)} (8.1%)</div>
+          </div>
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">CA HT</div>
+            <div className="text-xl font-bold text-slate-900 tabular-nums">{fmt(margins.totalHT)}</div>
+            <div className="text-xs text-slate-400 mt-1">base de calcul des marges</div>
+          </div>
+          <div className={`rounded-xl border p-5 shadow-sm ${margins.materialRatio > MARGIN_TARGETS.material_max ? "bg-red-50 border-red-200" : margins.materialCost === 0 ? "bg-slate-50 border-slate-200" : "bg-emerald-50 border-emerald-200"}`}>
+            <div className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Coût matériel</div>
+            <div className="text-xl font-bold text-slate-900 tabular-nums">{fmt(margins.materialCost)}</div>
+            {margins.materialCost > 0 && (
+              <div className={`text-xs mt-1 font-medium ${margins.materialRatio > MARGIN_TARGETS.material_max ? "text-red-600" : "text-emerald-600"}`}>
+                {(margins.materialRatio * 100).toFixed(1)}% du HT · cible max {(MARGIN_TARGETS.material_max * 100).toFixed(0)}%
               </div>
-            </div>
+            )}
           </div>
         </div>
 
         {/* Analyse marges */}
         {margins.materialCost > 0 ? (
-          <div className="bg-white rounded-xl border border-gray-200 p-6">
-            <h2 className="text-base font-semibold text-gray-900 mb-4">Analyse des marges</h2>
-            <div className="grid grid-cols-4 gap-4 mb-6">
-              <MarginBadge
-                ratio={1 - margins.materialRatio}
-                target={1 - MARGIN_TARGETS.material_max}
-                label="Marge matière brute"
-              />
-              <MarginBadge
-                ratio={margins.grossProfitRatio}
-                target={MARGIN_TARGETS.gross_profit_target + MARGIN_TARGETS.salary_ratio}
-                label="Marge après matière"
-              />
-              <MarginBadge
-                ratio={margins.grossExploitationRatio}
-                target={MARGIN_TARGETS.gross_profit_target}
-                label="Bénéfice brut exploit."
-              />
-              <MarginBadge
-                ratio={margins.netProfitRatio}
-                target={MARGIN_TARGETS.net_profit_target}
-                label="Bénéfice net estimé"
-              />
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 border-b border-slate-100">
+              <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Analyse des marges</h2>
             </div>
 
-            {/* Cascade */}
-            <div className="border-t border-gray-100 pt-4 space-y-2 text-sm">
-              <div className="flex justify-between py-1">
-                <span className="text-gray-800">Produits HT</span>
-                <span className="font-bold text-gray-900">{fmt(margins.totalHT)}</span>
+            <div className="grid grid-cols-4 gap-0 divide-x divide-slate-100">
+              <div className="p-5">
+                <MarginBadge ratio={1 - margins.materialRatio} target={1 - MARGIN_TARGETS.material_max} label="Marge matière brute" />
               </div>
-              <div className="flex justify-between py-1 text-red-600">
-                <span>− Matériel ({(margins.materialRatio * 100).toFixed(1)}%)</span>
-                <span>− {fmt(margins.materialCost)}</span>
+              <div className="p-5">
+                <MarginBadge ratio={margins.grossProfitRatio} target={MARGIN_TARGETS.gross_profit_target + MARGIN_TARGETS.salary_ratio} label="Marge après matière" />
               </div>
-              <div className="flex justify-between py-1 font-semibold border-t border-gray-100 text-gray-900">
-                <span>= Marge après matière</span>
-                <span className="text-gray-900">{fmt(margins.grossProfit)} ({(margins.grossProfitRatio * 100).toFixed(1)}%)</span>
+              <div className="p-5">
+                <MarginBadge ratio={margins.grossExploitationRatio} target={MARGIN_TARGETS.gross_profit_target} label="Bénéfice brut exploit." />
               </div>
-              <div className="flex justify-between py-1 text-orange-600">
-                <span>− Salaires fixes alloués (17%)</span>
-                <span>− {fmt(margins.salaryAllocation)}</span>
+              <div className="p-5">
+                <MarginBadge ratio={margins.netProfitRatio} target={MARGIN_TARGETS.net_profit_target} label="Bénéfice net estimé" />
               </div>
-              <div className="flex justify-between py-1 font-semibold border-t border-gray-100 text-gray-900">
-                <span>= Bénéfice brut d'exploitation</span>
-                <span className={margins.grossExploitationRatio >= MARGIN_TARGETS.gross_profit_target ? "text-green-600" : "text-red-600"}>
-                  {fmt(margins.grossExploitationProfit)} ({(margins.grossExploitationRatio * 100).toFixed(1)}%)
-                </span>
-              </div>
-              <div className="flex justify-between py-1 text-orange-600">
-                <span>− Charges fixes allouées (15%)</span>
-                <span>− {fmt(margins.fixedCostsAllocation)}</span>
-              </div>
-              <div className="flex justify-between py-1 font-bold border-t border-gray-200 pt-2 text-gray-900">
-                <span>= Bénéfice net estimé</span>
-                <span className={margins.netProfitRatio >= MARGIN_TARGETS.net_profit_target ? "text-green-700" : "text-red-700"}>
-                  {fmt(margins.netProfit)} ({(margins.netProfitRatio * 100).toFixed(1)}%)
-                </span>
-              </div>
+            </div>
+
+            {/* Cascade waterfall */}
+            <div className="px-6 py-5 border-t border-slate-100 space-y-1">
+              <CascadeRow label="Produits HT" value={fmt(margins.totalHT)} valueClass="text-slate-900 font-bold" />
+              <CascadeRow label={`Matériel (${(margins.materialRatio * 100).toFixed(1)}%)`} value={`− ${fmt(margins.materialCost)}`} valueClass="text-red-600" indent />
+              <CascadeRow label="Marge après matière" value={`${fmt(margins.grossProfit)} (${(margins.grossProfitRatio * 100).toFixed(1)}%)`} separator valueClass={getMarginLevel(margins.grossProfitRatio, MARGIN_TARGETS.gross_profit_target + MARGIN_TARGETS.salary_ratio) === "good" ? "text-emerald-600 font-semibold" : "text-amber-600 font-semibold"} />
+              <CascadeRow label={`Salaires alloués (${(MARGIN_TARGETS.salary_ratio * 100).toFixed(1)}%)`} value={`− ${fmt(margins.salaryAllocation)}`} valueClass="text-amber-600" indent />
+              <CascadeRow label="Bénéfice brut d'exploitation" value={`${fmt(margins.grossExploitationProfit)} (${(margins.grossExploitationRatio * 100).toFixed(1)}%)`} separator valueClass={getMarginLevel(margins.grossExploitationRatio, MARGIN_TARGETS.gross_profit_target) === "good" ? "text-emerald-600 font-semibold" : margins.grossExploitationRatio >= 0 ? "text-amber-600 font-semibold" : "text-red-600 font-semibold"} />
+              <CascadeRow label={`Charges fixes allouées (${(MARGIN_TARGETS.fixed_costs_ratio * 100).toFixed(1)}%)`} value={`− ${fmt(margins.fixedCostsAllocation)}`} valueClass="text-amber-600" indent />
+              <CascadeRow label="Bénéfice net estimé" value={`${fmt(margins.netProfit)} (${(margins.netProfitRatio * 100).toFixed(1)}%)`} separator bold valueClass={getMarginLevel(margins.netProfitRatio, MARGIN_TARGETS.net_profit_target) === "good" ? "text-emerald-700 font-bold" : margins.netProfitRatio >= 0 ? "text-amber-600 font-bold" : "text-red-600 font-bold"} />
             </div>
           </div>
         ) : (
-          <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4 text-yellow-800 text-sm">
-            Aucun prix d'achat trouvé dans les positions. Renseignez les <strong>prix d'achat</strong> sur les lignes Bexio pour calculer la marge automatiquement.
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-amber-800 text-sm">
+            Aucun prix d'achat trouvé dans les positions. Renseignez les <strong>prix d'achat</strong> sur les articles Bexio pour calculer la marge automatiquement.
           </div>
         )}
 
         {/* Positions */}
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100">
-            <h2 className="text-base font-semibold text-gray-900">Positions de l'offre</h2>
+        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-slate-100">
+            <h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wide">Positions de l'offre</h2>
           </div>
           <table className="w-full text-sm">
-            <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+            <thead className="border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wide">
               <tr>
-                <th className="px-6 py-3 text-left">Description</th>
-                <th className="px-4 py-3 text-right">Qté</th>
-                <th className="px-4 py-3 text-right">Prix vente</th>
-                <th className="px-4 py-3 text-right">Coût achat</th>
-                <th className="px-4 py-3 text-right">Total HT</th>
-                <th className="px-4 py-3 text-right">Marge</th>
+                <th className="px-6 py-3 text-left font-semibold">Description</th>
+                <th className="px-4 py-3 text-right font-semibold">Qté</th>
+                <th className="px-4 py-3 text-right font-semibold">PU vente</th>
+                <th className="px-4 py-3 text-right font-semibold">Coût achat</th>
+                <th className="px-4 py-3 text-right font-semibold">Total HT</th>
+                <th className="px-4 py-3 text-right font-semibold">Marge</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-100">
+            <tbody>
               {positions.map((pos: any) => {
                 const saleTotal = parseFloat(pos.position_total) || 0;
                 const buyTotal = pos.purchase_total || 0;
-                const posMargin = saleTotal > 0 ? (saleTotal - buyTotal) / saleTotal : null;
+                const posMargin = saleTotal > 0 && buyTotal > 0 ? (saleTotal - buyTotal) / saleTotal : null;
+                const level = getMarginLevel(posMargin, 0.4);
+                const cls = marginClasses[level];
                 return (
-                  <tr key={pos.id} className="hover:bg-gray-50">
-                    <td className="px-6 py-3 text-gray-800 text-xs max-w-xs leading-relaxed">
-                      <span dangerouslySetInnerHTML={{ __html: pos.text || "—" }} />
+                  <tr key={pos.id} className="border-b border-slate-50 hover:bg-slate-50 transition-colors last:border-0">
+                    <td className="px-6 py-3 text-slate-700 text-xs leading-relaxed max-w-xs">
+                      <span dangerouslySetInnerHTML={{ __html: pos.text || "-" }} />
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-800 whitespace-nowrap">
+                    <td className="px-4 py-3 text-right text-slate-500 text-xs whitespace-nowrap tabular-nums">
                       {parseFloat(pos.amount).toLocaleString("fr-CH")} {pos.unit_name}
                     </td>
-                    <td className="px-4 py-3 text-right text-gray-900 font-medium whitespace-nowrap">
+                    <td className="px-4 py-3 text-right text-slate-800 whitespace-nowrap tabular-nums">
                       {fmt(parseFloat(pos.unit_price))}
                       {pos.discount_in_percent && (
-                        <span className="text-xs text-orange-600 font-semibold ml-1">-{parseFloat(pos.discount_in_percent)}%</span>
+                        <span className="text-xs text-amber-600 font-semibold ml-1">-{parseFloat(pos.discount_in_percent)}%</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-right text-orange-600 whitespace-nowrap">
-                      {buyTotal > 0 ? fmt(buyTotal) : <span className="text-gray-300">—</span>}
+                    <td className="px-4 py-3 text-right text-slate-500 whitespace-nowrap tabular-nums">
+                      {buyTotal > 0 ? fmt(buyTotal) : <span className="text-slate-300">-</span>}
                     </td>
-                    <td className="px-4 py-3 text-right font-bold text-gray-900 whitespace-nowrap">{fmt(saleTotal)}</td>
+                    <td className="px-4 py-3 text-right font-bold text-slate-900 whitespace-nowrap tabular-nums">{fmt(saleTotal)}</td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
-                      {posMargin !== null && buyTotal > 0 ? (
-                        <span className={posMargin >= 0.4 ? "text-green-600 font-medium" : "text-red-600 font-medium"}>
+                      {posMargin !== null ? (
+                        <span className={`text-xs font-bold tabular-nums ${cls.text}`}>
                           {(posMargin * 100).toFixed(1)}%
                         </span>
-                      ) : <span className="text-gray-300">—</span>}
+                      ) : <span className="text-slate-300">-</span>}
                     </td>
                   </tr>
                 );
@@ -210,6 +207,21 @@ export default async function QuoteDetailPage({ params }: Props) {
           </table>
         </div>
       </main>
+    </div>
+  );
+}
+
+function CascadeRow({
+  label, value, valueClass, indent, separator, bold,
+}: {
+  label: string; value: string; valueClass?: string; indent?: boolean; separator?: boolean; bold?: boolean;
+}) {
+  return (
+    <div className={`flex justify-between items-baseline py-1.5 text-sm ${separator ? "border-t border-slate-100 mt-1 pt-2" : ""}`}>
+      <span className={`${indent ? "pl-4 text-slate-500" : "text-slate-700"} ${bold ? "font-semibold" : ""}`}>
+        {indent ? "↳ " : ""}{label}
+      </span>
+      <span className={`tabular-nums ${valueClass ?? "text-slate-900"}`}>{value}</span>
     </div>
   );
 }

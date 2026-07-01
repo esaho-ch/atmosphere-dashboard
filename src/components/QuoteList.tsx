@@ -73,13 +73,13 @@ export default function QuoteList({ quotes }: Props) {
 
       {/* Tableau */}
       <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-        <div className="grid grid-cols-6 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
+        <div className="grid grid-cols-7 gap-4 px-6 py-3 bg-gray-50 border-b border-gray-200 text-xs font-semibold text-gray-500 uppercase tracking-wide">
           <div>N° Offre</div>
-          <div>Client</div>
+          <div className="col-span-2">Client</div>
           <div>Date</div>
           <div className="text-right">Montant HT</div>
           <div className="text-center">Statut</div>
-          <div></div>
+          <div className="text-center">Marge nette</div>
         </div>
         {filtered.length === 0 && (
           <div className="px-6 py-12 text-center text-gray-400">Aucune offre pour cette période</div>

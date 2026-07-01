@@ -1,5 +1,7 @@
 "use client";
 
+import { getMarginLevel, marginClasses } from "@/lib/marginColor";
+
 interface Props {
   ratio: number;
   target: number;
@@ -7,13 +9,20 @@ interface Props {
 }
 
 export default function MarginBadge({ ratio, target, label }: Props) {
+  const level = getMarginLevel(ratio, target);
+  const cls = marginClasses[level];
   const pct = (ratio * 100).toFixed(1);
-  const ok = ratio >= target;
+
   return (
-    <div className={`rounded-lg px-3 py-2 text-sm font-medium ${ok ? "bg-green-100 text-green-900" : "bg-red-100 text-red-900"}`}>
-      <div className="text-xs font-semibold opacity-80">{label}</div>
-      <div className="text-lg font-bold">{pct}%</div>
-      <div className="text-xs opacity-70">cible {(target * 100).toFixed(0)}%</div>
+    <div className={`rounded-lg px-4 py-3 ${cls.bg} ${cls.border} border`}>
+      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-1">{label}</div>
+      <div className={`text-2xl font-bold tabular-nums ${cls.text}`}>{pct}%</div>
+      <div className="flex items-center gap-1 mt-1">
+        <span className={`text-xs ${cls.text} opacity-70`}>cible {(target * 100).toFixed(0)}%</span>
+        {level === "good" && <span className="text-xs text-emerald-600">✓</span>}
+        {level === "warning" && <span className="text-xs text-amber-600">↗</span>}
+        {level === "bad" && <span className="text-xs text-red-600">✕</span>}
+      </div>
     </div>
   );
 }

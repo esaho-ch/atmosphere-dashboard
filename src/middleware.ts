@@ -1,27 +1,22 @@
 import { NextRequest, NextResponse } from "next/server";
+import { verifySession } from "@/lib/session";
 
-export function middleware(req: NextRequest) {
-  const user = process.env.BASIC_AUTH_USER;
-  const pass = process.env.BASIC_AUTH_PASSWORD;
+const PUBLIC_PATHS = ["/login", "/api/auth/login", "/api/auth/callback"];
 
-  if (!user || !pass) return NextResponse.next();
+export async function middleware(req: NextRequest) {
+  const { pathname } = req.nextUrl;
 
-  const authHeader = req.headers.get("authorization");
-  if (authHeader) {
-    const [scheme, encoded] = authHeader.split(" ");
-    if (scheme === "Basic" && encoded) {
-      const decoded = atob(encoded);
-      const [u, p] = decoded.split(":");
-      if (u === user && p === pass) return NextResponse.next();
-    }
+  if (PUBLIC_PATHS.some((p) => pathname.startsWith(p))) {
+    return NextResponse.next();
   }
 
-  return new NextResponse("Accès non autorisé", {
-    status: 401,
-    headers: {
-      "WWW-Authenticate": 'Basic realm="Atmosphere Dashboard"',
-    },
-  });
+  const session = await verifySession(req.headers.get("cookie"));
+
+  if (!session) {
+    return NextResponse.redirect(new URL("/login", req.nextUrl.origin));
+  }
+
+  return NextResponse.next();
 }
 
 export const config = {
