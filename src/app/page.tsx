@@ -94,7 +94,7 @@ export default async function HomePage({
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-1">
             {YEARS.map((y) => (
-              <Button key={y} variant={y === year ? "default" : "ghost"} size="sm" render={<Link href={buildUrl(y, 1)} />}>
+              <Button key={y} variant={y === year ? "default" : "ghost"} size="sm" nativeButton={false} render={<Link href={buildUrl(y, 1)} />}>
                 {y}
               </Button>
             ))}
@@ -126,12 +126,12 @@ export default async function HomePage({
         {(page > 1 || hasMore) && (
           <div className="flex justify-end gap-2 mt-4">
             {page > 1 && (
-              <Button variant="outline" size="sm" render={<Link href={buildUrl(year, page - 1)} />}>
+              <Button variant="outline" size="sm" nativeButton={false} render={<Link href={buildUrl(year, page - 1)} />}>
                 ← Précédent
               </Button>
             )}
             {hasMore && (
-              <Button variant="outline" size="sm" render={<Link href={buildUrl(year, page + 1)} />}>
+              <Button variant="outline" size="sm" nativeButton={false} render={<Link href={buildUrl(year, page + 1)} />}>
                 Suivant →
               </Button>
             )}
