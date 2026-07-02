@@ -58,37 +58,35 @@ export default async function QuoteDetailPage({ params }: Props) {
   const statusLabel = STATUS_LABELS[quote.kb_item_status_id] ?? "-";
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="flex flex-col h-full">
       {/* Header */}
-      <header className="bg-white border-b border-slate-200 px-8 py-4">
-        <Link href="/" className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800 text-sm transition-colors">
-          <ChevronLeft size={14} />Toutes les offres
-        </Link>
-        <div className="flex items-start justify-between mt-2">
+      <div className="bg-white border-b border-slate-200 px-8 py-5">
+        <div className="flex items-center gap-1.5 text-xs text-slate-400 mb-3">
+          <Link href="/" className="hover:text-slate-700 transition-colors">Offres</Link>
+          <ChevronLeft size={12} className="rotate-180" />
+          <span className="text-slate-600 font-medium">{quote.document_nr}</span>
+        </div>
+        <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-900">
-              {quote.document_nr}
-              <span className="text-slate-400 font-normal mx-2">·</span>
-              <span className="font-semibold">{quote.contact_name || "Client inconnu"}</span>
-            </h1>
-            <p className="text-sm text-slate-400 mt-0.5">
-              {quote.is_valid_from?.split("-").reverse().join("/")}
-              <span className="mx-2">·</span>
-              <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded ${
+            <h1 className="text-xl font-bold text-slate-900">{quote.contact_name || "Client inconnu"}</h1>
+            <div className="flex items-center gap-2 mt-1">
+              <span className="text-sm text-slate-400">{quote.is_valid_from?.split("-").reverse().join("/")}</span>
+              <span className="text-slate-200">·</span>
+              <span className={`inline-block text-xs font-medium px-2 py-0.5 rounded-full ${
                 quote.kb_item_status_id === 3 ? "bg-emerald-50 text-emerald-700" :
                 quote.kb_item_status_id === 4 ? "bg-red-50 text-red-600" :
                 "bg-slate-100 text-slate-500"
               }`}>{statusLabel}</span>
-            </p>
+            </div>
           </div>
           <div className="text-right">
             <div className="text-2xl font-bold text-slate-900 tabular-nums">{fmtShort(margins.totalHT)}</div>
             <div className="text-sm text-slate-400">HT · {fmtShort(margins.totalTTC)} TTC</div>
           </div>
         </div>
-      </header>
+      </div>
 
-      <main className="max-w-5xl mx-auto px-8 py-6 space-y-6">
+      <main className="flex-1 max-w-5xl px-8 py-6 space-y-6">
 
         {/* Résumé financier */}
         <div className="grid grid-cols-3 gap-4">

@@ -1,7 +1,5 @@
 import { loadSettings, computeMarginTargets } from "@/lib/settings";
 import { updateSettings } from "./actions";
-import Link from "next/link";
-import { ChevronLeft } from "lucide-react";
 
 const fmt = (n: number) => n.toLocaleString("fr-CH", { style: "currency", currency: "CHF", maximumFractionDigits: 0 });
 const pct = (n: number) => `${(n * 100).toFixed(1)}%`;
@@ -31,21 +29,13 @@ export default function SettingsPage() {
   const targets = computeMarginTargets(s);
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Link href="/" className="inline-flex items-center gap-1 text-slate-500 hover:text-slate-800 text-sm transition-colors">
-            <ChevronLeft size={14} />Retour
-          </Link>
-          <div className="w-px h-4 bg-slate-200" />
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">Paramètres des charges</h1>
-            <p className="text-xs text-slate-400">Ces valeurs servent au calcul des marges sur toutes les offres.</p>
-          </div>
-        </div>
-      </header>
+    <div className="flex flex-col h-full">
+      <div className="bg-white border-b border-slate-200 px-8 py-5">
+        <h1 className="text-lg font-bold text-slate-900">Paramètres</h1>
+        <p className="text-sm text-slate-400 mt-0.5">Charges et hypothèses pour le calcul des marges</p>
+      </div>
 
-      <main className="max-w-4xl mx-auto px-8 py-6 space-y-6">
+      <main className="flex-1 max-w-4xl px-8 py-6 space-y-6">
 
         {/* Ratios calculés */}
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
@@ -162,3 +152,4 @@ export default function SettingsPage() {
     </div>
   );
 }
+

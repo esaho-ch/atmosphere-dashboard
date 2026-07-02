@@ -1,8 +1,4 @@
 import { fetchOrders, fetchInvoices, fetchContact, fetchArticleGroups, BexioOrder, BexioInvoice } from "@/lib/bexio";
-import { cookies } from "next/headers";
-import { verifySession } from "@/lib/session";
-import Link from "next/link";
-import { ChevronLeft, LogOut, Settings } from "lucide-react";
 import PaymentDonut from "@/components/charts/PaymentDonut";
 import ClientGroupsBar from "@/components/charts/ClientGroupsBar";
 import ComparisonBar from "@/components/charts/ComparisonBar";
@@ -201,8 +197,6 @@ export default async function AnalyticsPage({
 }: {
   searchParams: Promise<{ year?: string }>;
 }) {
-  const cookieStore = await cookies();
-  const session = await verifySession(cookieStore.toString());
   const sp = await searchParams;
   const year = parseInt(sp.year ?? "") || new Date().getFullYear() - 1;
 
@@ -217,41 +211,26 @@ export default async function AnalyticsPage({
   const availableYears = [2024, 2025, 2026];
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <header className="bg-white border-b border-slate-200 px-8 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <div>
-            <h1 className="text-lg font-bold text-slate-900 leading-tight">Atmosphere</h1>
-            <p className="text-xs text-slate-400 font-medium tracking-wide uppercase">Analyse des ventes</p>
-          </div>
+    <div className="flex flex-col h-full">
+      {/* Page header */}
+      <div className="bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between">
+        <div>
+          <h1 className="text-lg font-bold text-slate-900">Analyse</h1>
+          <p className="text-sm text-slate-400 mt-0.5">Vue d'ensemble des ventes et paiements</p>
         </div>
-        <nav className="flex items-center gap-1">
-          {session?.name && <span className="text-xs text-slate-400 mr-3 border-r border-slate-200 pr-3">{session.name}</span>}
-          <Link href="/" className="inline-flex items-center gap-1 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md px-3 py-1.5 transition-colors">
-            <ChevronLeft size={14} />Offres
-          </Link>
-          <Link href="/settings" className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-md px-3 py-1.5 transition-colors">
-            <Settings size={14} />Paramètres
-          </Link>
-          <div className="w-px h-4 bg-slate-200 mx-1" />
-          <a href="/api/auth/logout" className="inline-flex items-center text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors p-1.5 rounded-md" title="Déconnexion">
-            <LogOut size={16} />
-          </a>
-        </nav>
-      </header>
-
-      <main className="max-w-6xl mx-auto px-8 py-6 space-y-6">
-        {/* Toolbar */}
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1">
           {availableYears.map((y) => (
             <a key={y} href={`/analytics?year=${y}`}
-              className={`px-3.5 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                y === year ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-200"
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                y === year ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
               }`}>
               {y}
             </a>
           ))}
         </div>
+      </div>
+
+      <main className="flex-1 px-8 py-6 space-y-6">
 
         {error && (
           <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-red-700 text-sm">

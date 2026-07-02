@@ -1,9 +1,10 @@
-export default function LoginPage({ searchParams }: { searchParams: { error?: string } }) {
+export default async function LoginPage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+  const { error } = await searchParams;
   const errorMessages: Record<string, string> = {
     access_denied: "Accès refusé par Bexio.",
     token_failed: "Erreur lors de l'échange du token. Réessaie.",
   };
-  const errorMsg = searchParams.error ? errorMessages[searchParams.error] : null;
+  const errorMsg = error ? errorMessages[error] : null;
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center">

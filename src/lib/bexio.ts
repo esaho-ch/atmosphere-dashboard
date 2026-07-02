@@ -4,19 +4,23 @@ import { cookies } from "next/headers";
 import { verifySession } from "./session";
 
 async function getBexioToken(): Promise<string> {
+  if (process.env.BEXIO_API_TOKEN) return process.env.BEXIO_API_TOKEN;
   const cookieStore = await cookies();
   const session = await verifySession(cookieStore.toString());
   if (session?.access_token) return session.access_token;
-  // Fallback PAT pour le dev local sans OAuth configuré
-  if (process.env.BEXIO_API_TOKEN) return process.env.BEXIO_API_TOKEN;
   throw new Error("Aucun token Bexio disponible");
 }
 
+async function bexioFetch(url: string, init?: RequestInit): Promise<Response> {
+  const token = await getBexioToken();
+  return fetch(url, {
+    ...init,
+    headers: { Accept: "application/json", Authorization: `Bearer ${token}`, ...(init?.headers ?? {}) },
+  });
+}
+
 async function bexioHeaders() {
-  return {
-    Accept: "application/json",
-    Authorization: `Bearer ${await getBexioToken()}`,
-  };
+  return { Accept: "application/json", Authorization: `Bearer ${await getBexioToken()}` };
 }
 
 export interface BexioQuote {
@@ -101,82 +105,60 @@ export async function fetchQuotesPage(
   offset: number,
   year?: number
 ): Promise<{ quotes: BexioQuote[]; hasMore: boolean }> {
-  const headers = await bexioHeaders();
-  const opts = { headers, next: { revalidate: 60 } };
-
   if (year) {
     const body = JSON.stringify([
       { field: "is_valid_from", value: `${year}-01-01`, criteria: ">=" },
       { field: "is_valid_from", value: `${year}-12-31`, criteria: "<=" },
     ]);
-    const res = await fetch(
+    const res = await bexioFetch(
       `${BEXIO_BASE_URL}/kb_offer/search?limit=${limit}&offset=${offset}&order_by=id_desc`,
-      { method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body, next: { revalidate: 60 } }
+      { method: "POST", headers: { "Content-Type": "application/json" }, body, next: { revalidate: 60 } } as RequestInit
     );
     if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
     const quotes: BexioQuote[] = await res.json();
     return { quotes, hasMore: quotes.length === limit };
   }
 
-  const res = await fetch(
+  const res = await bexioFetch(
     `${BEXIO_BASE_URL}/kb_offer?limit=${limit}&offset=${offset}&order_by=id_desc`,
-    opts
+    { next: { revalidate: 60 } } as RequestInit
   );
   if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
   const quotes: BexioQuote[] = await res.json();
   return { quotes, hasMore: quotes.length === limit };
 }
 
-/** Kept for analytics page which needs all quotes. */
-export async function fetchQuotes(): Promise<BexioQuote[]> {
-  const PAGE_SIZE = 500;
-  const all: BexioQuote[] = [];
-  let offset = 0;
-  while (true) {
-    const res = await fetch(
-      `${BEXIO_BASE_URL}/kb_offer?limit=${PAGE_SIZE}&offset=${offset}&order_by=id_desc`,
-      { headers: await bexioHeaders(), next: { revalidate: 300 } }
-    );
-    if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
-    const page: BexioQuote[] = await res.json();
-    all.push(...page);
-    if (page.length < PAGE_SIZE) break;
-    offset += PAGE_SIZE;
-  }
-  return all;
-}
-
 export async function fetchQuote(id: number): Promise<BexioQuote> {
-  const res = await fetch(
+  const res = await bexioFetch(
     `${BEXIO_BASE_URL}/kb_offer/${id}`,
-    { headers: await bexioHeaders(), next: { revalidate: 60 } }
+    { next: { revalidate: 60 } } as RequestInit
   );
   if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
   return res.json();
 }
 
 export async function fetchQuotePositions(quoteId: number): Promise<BexioPositionArticle[]> {
-  const res = await fetch(
+  const res = await bexioFetch(
     `${BEXIO_BASE_URL}/kb_offer/${quoteId}/kb_position_article`,
-    { headers: await bexioHeaders(), next: { revalidate: 300 } }
+    { next: { revalidate: 300 } } as RequestInit
   );
   if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
   return res.json();
 }
 
 export async function fetchArticle(articleId: number): Promise<BexioArticle> {
-  const res = await fetch(
+  const res = await bexioFetch(
     `${BEXIO_BASE_URL}/article/${articleId}`,
-    { headers: await bexioHeaders(), next: { revalidate: 3600 } }
+    { next: { revalidate: 3600 } } as RequestInit
   );
   if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
   return res.json();
 }
 
 export async function fetchContact(contactId: number): Promise<BexioContact> {
-  const res = await fetch(
+  const res = await bexioFetch(
     `${BEXIO_BASE_URL}/contact/${contactId}`,
-    { headers: await bexioHeaders(), next: { revalidate: 3600 } }
+    { next: { revalidate: 3600 } } as RequestInit
   );
   if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
   return res.json();
@@ -219,9 +201,9 @@ export async function fetchOrders(): Promise<BexioOrder[]> {
   const all: BexioOrder[] = [];
   let offset = 0;
   while (true) {
-    const res = await fetch(
+    const res = await bexioFetch(
       `${BEXIO_BASE_URL}/kb_order?limit=${PAGE_SIZE}&offset=${offset}&order_by=id_desc`,
-      { headers: await bexioHeaders(), next: { revalidate: 300 } }
+      { next: { revalidate: 300 } } as RequestInit
     );
     if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
     const page: BexioOrder[] = await res.json();
@@ -237,9 +219,9 @@ export async function fetchInvoices(): Promise<BexioInvoice[]> {
   const all: BexioInvoice[] = [];
   let offset = 0;
   while (true) {
-    const res = await fetch(
+    const res = await bexioFetch(
       `${BEXIO_BASE_URL}/kb_invoice?limit=${PAGE_SIZE}&offset=${offset}&order_by=id_desc`,
-      { headers: await bexioHeaders(), next: { revalidate: 300 } }
+      { next: { revalidate: 300 } } as RequestInit
     );
     if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
     const page: BexioInvoice[] = await res.json();
@@ -251,18 +233,18 @@ export async function fetchInvoices(): Promise<BexioInvoice[]> {
 }
 
 export async function fetchArticleGroups(): Promise<BexioArticleGroup[]> {
-  const res = await fetch(
+  const res = await bexioFetch(
     `${BEXIO_BASE_URL}/article_group`,
-    { headers: await bexioHeaders(), next: { revalidate: 3600 } }
+    { next: { revalidate: 3600 } } as RequestInit
   );
   if (!res.ok) return [];
   return res.json();
 }
 
 export async function fetchOrderPositions(orderId: number): Promise<BexioPositionArticle[]> {
-  const res = await fetch(
+  const res = await bexioFetch(
     `${BEXIO_BASE_URL}/kb_order/${orderId}/kb_position_article`,
-    { headers: await bexioHeaders(), next: { revalidate: 300 } }
+    { next: { revalidate: 300 } } as RequestInit
   );
   if (!res.ok) return [];
   return res.json();
