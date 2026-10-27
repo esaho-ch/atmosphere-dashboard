@@ -5,8 +5,8 @@ import {
 } from "recharts";
 
 interface Props {
-  prevYear: number;
-  curYear: number;
+  prevYear: string | number;
+  curYear: string | number;
   data: {
     label: string;
     prev: number;

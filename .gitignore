@@ -39,3 +39,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# fetched supplier textures
+data/textures.json
+data/textures/
+data/article-samples.json
+data/navarti-tiff-source/
+data/texture-cache/
+data/lamour-tiff-source/
+data/article-samples-query*.json
+data/textures-removed-backup/
+data/catalogue-cache/
+data/publish-state.json
+data/local-sources.json

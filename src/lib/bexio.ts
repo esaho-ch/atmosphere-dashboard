@@ -4,10 +4,12 @@ import { cookies } from "next/headers";
 import { verifySession } from "./session";
 
 async function getBexioToken(): Promise<string> {
-  if (process.env.BEXIO_API_TOKEN) return process.env.BEXIO_API_TOKEN;
+  // The logged-in user's token comes first (it is refreshed automatically); BEXIO_API_TOKEN is only a fallback,
+  // so a stale personal token in .env.local can no longer break every call with a 401.
   const cookieStore = await cookies();
   const session = await verifySession(cookieStore.toString());
   if (session?.access_token) return session.access_token;
+  if (process.env.BEXIO_API_TOKEN) return process.env.BEXIO_API_TOKEN;
   throw new Error("Aucun token Bexio disponible");
 }
 
@@ -51,6 +53,11 @@ export interface BexioArticle {
   id: number;
   intern_name: string;
   intern_code: string;
+  intern_description?: string | null;
+  contact_id?: number | null;
+  deliverer_code?: string | null;
+  deliverer_name?: string | null;
+  deliverer_description?: string | null;
   purchase_price: string;
   sale_price: string;
 }
@@ -153,6 +160,24 @@ export async function fetchArticle(articleId: number): Promise<BexioArticle> {
   );
   if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
   return res.json();
+}
+
+export async function fetchArticles(): Promise<BexioArticle[]> {
+  const PAGE_SIZE = 500;
+  const all: BexioArticle[] = [];
+  let offset = 0;
+  while (true) {
+    const res = await bexioFetch(
+      `${BEXIO_BASE_URL}/article?limit=${PAGE_SIZE}&offset=${offset}&order_by=id`,
+      { next: { revalidate: 300 } } as RequestInit
+    );
+    if (!res.ok) throw new Error(`Bexio API error: ${res.status}`);
+    const page: BexioArticle[] = await res.json();
+    all.push(...page);
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+  return all;
 }
 
 export async function fetchContact(contactId: number): Promise<BexioContact> {

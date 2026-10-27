@@ -1,4 +1,4 @@
-import { fetchOrders, fetchInvoices, fetchContact, fetchArticleGroups, BexioOrder, BexioInvoice } from "@/lib/bexio";
+import { fetchOrders, fetchInvoices, fetchContact, BexioOrder, BexioInvoice } from "@/lib/bexio";
 import PaymentDonut from "@/components/charts/PaymentDonut";
 import ClientGroupsBar from "@/components/charts/ClientGroupsBar";
 import ComparisonBar from "@/components/charts/ComparisonBar";
@@ -37,37 +37,47 @@ function classifyClientGroup(contactName: string): string {
   return "Nelson (autres clients)";
 }
 
-async function buildAnalytics(year: number) {
-  const [allOrders, allInvoices, articleGroups] = await Promise.all([
-    fetchOrders(),
-    fetchInvoices(),
-    fetchArticleGroups(),
-  ]);
+function shiftYear(ym: string, delta: number) {
+  return `${parseInt(ym.substring(0, 4)) + delta}${ym.substring(4)}`;
+}
 
-  const groupMap = new Map(articleGroups.map((g) => [g.id, g.name]));
+function formatMonth(ym: string) {
+  const [y, m] = ym.split("-");
+  return `${m}.${y}`;
+}
 
-  // Filter to selected year
-  const orders = allOrders.filter((o) => getYear(o.is_valid_from) === year);
-  const invoices = allInvoices.filter((i) => getYear(i.is_valid_from) === year);
+const MONTH_RE = /^\d{4}-(0[1-9]|1[0-2])$/;
 
-  // Enrich orders with contact names
+async function buildAnalytics(from: string, to: string) {
+  const [allOrders, allInvoices] = await Promise.all([fetchOrders(), fetchInvoices()]);
+
+  const prevFrom = shiftYear(from, -1);
+  const prevTo = shiftYear(to, -1);
+
+  const orders = allOrders.filter((o) => isInPeriod(o.is_valid_from, from, to));
+  const invoices = allInvoices.filter((i) => isInPeriod(i.is_valid_from, from, to));
+  const prevYearOrders = allOrders.filter((o) => isInPeriod(o.is_valid_from, prevFrom, prevTo));
+  const prevYearInvoices = allInvoices.filter((i) => isInPeriod(i.is_valid_from, prevFrom, prevTo));
+
+  // Resolve contact names (unique ids, in parallel)
+  const contactIds = Array.from(new Set([...orders, ...prevYearOrders].map((o) => o.contact_id)));
   const contactCache = new Map<number, string>();
-  const enrichedOrders: (BexioOrder & { contact_name: string; totalHT: number })[] = [];
-  for (const order of orders) {
-    if (!contactCache.has(order.contact_id)) {
+  await Promise.all(
+    contactIds.map(async (id) => {
       try {
-        const c = await fetchContact(order.contact_id);
-        contactCache.set(order.contact_id, [c.name_1, c.name_2].filter(Boolean).join(" "));
+        const c = await fetchContact(id);
+        contactCache.set(id, [c.name_1, c.name_2].filter(Boolean).join(" "));
       } catch {
-        contactCache.set(order.contact_id, "Inconnu");
+        contactCache.set(id, "Inconnu");
       }
-    }
-    enrichedOrders.push({
-      ...order,
-      contact_name: contactCache.get(order.contact_id) ?? "",
-      totalHT: parseFloat(order.total_net) || 0,
-    });
-  }
+    })
+  );
+
+  const enrichedOrders = orders.map((order) => ({
+    ...order,
+    contact_name: contactCache.get(order.contact_id) ?? "",
+    totalHT: parseFloat(order.total_net) || 0,
+  }));
 
   // Overview
   const totalOrdersHT = enrichedOrders.reduce((s, o) => s + o.totalHT, 0);
@@ -93,56 +103,42 @@ async function buildAnalytics(year: number) {
   }
   const clientGroupsSorted = Object.entries(clientGroups)
     .sort((a, b) => b[1] - a[1])
-    .map(([name, total]) => ({ name, total, pct: total / totalOrdersHT }));
+    .map(([name, total]) => ({ name, total, pct: totalOrdersHT > 0 ? total / totalOrdersHT : 0 }));
 
-  // Year comparison (same period Jan–Jun)
-  const now = new Date();
-  const compEndMonth = `${year}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  const compStartPrev = `${year - 1}-01`;
-  const compStartCur = `${year}-01`;
-
-  const prevYearOrders = allOrders.filter(
-    (o) => isInPeriod(o.is_valid_from, compStartPrev, `${year - 1}-${String(now.getMonth() + 1).padStart(2, "0")}`)
-  );
-  const curYearOrders = allOrders.filter(
-    (o) => isInPeriod(o.is_valid_from, compStartCur, compEndMonth)
-  );
-
-  const prevYearInvoices = allInvoices.filter(
-    (i) => isInPeriod(i.is_valid_from, compStartPrev, `${year - 1}-${String(now.getMonth() + 1).padStart(2, "0")}`)
-  );
-  const curYearInvoices = allInvoices.filter(
-    (i) => isInPeriod(i.is_valid_from, compStartCur, compEndMonth)
-  );
-
-  const prevOrdTotal = prevYearOrders.reduce((s, o) => s + (parseFloat(o.total_net) || 0), 0);
-  const curOrdTotal = curYearOrders.reduce((s, o) => s + (parseFloat(o.total_net) || 0), 0);
-  const prevInvTotal = prevYearInvoices.reduce((s, i) => s + (parseFloat(i.total_net) || 0), 0);
-  const curInvTotal = curYearInvoices.reduce((s, i) => s + (parseFloat(i.total_net) || 0), 0);
-
-  const prevPaid = prevYearInvoices
-    .filter((i) => getInvoicePaymentStatus(i) === "Payée")
-    .reduce((s, i) => s + (parseFloat(i.total_net) || 0), 0);
-  const curPaid = curYearInvoices
-    .filter((i) => getInvoicePaymentStatus(i) === "Payée")
-    .reduce((s, i) => s + (parseFloat(i.total_net) || 0), 0);
-
-  const prevUnpaid = prevInvTotal - prevPaid;
-  const curUnpaid = curInvTotal - curPaid;
-
-  // Client groups year comparison
-  const prevClientGroups: Record<string, number> = {};
-  for (const o of prevYearOrders) {
-    const cname = contactCache.get(o.contact_id) ?? "";
-    const group = classifyClientGroup(cname);
-    prevClientGroups[group] = (prevClientGroups[group] ?? 0) + (parseFloat(o.total_net) || 0);
+  // Best customers (individual contacts)
+  const byContact = new Map<number, { name: string; total: number; count: number }>();
+  for (const o of enrichedOrders) {
+    const entry = byContact.get(o.contact_id) ?? { name: o.contact_name, total: 0, count: 0 };
+    entry.total += o.totalHT;
+    entry.count += 1;
+    byContact.set(o.contact_id, entry);
   }
-  const curClientGroups: Record<string, number> = {};
-  for (const o of curYearOrders) {
-    const cname = contactCache.get(o.contact_id) ?? "";
-    const group = classifyClientGroup(cname);
-    curClientGroups[group] = (curClientGroups[group] ?? 0) + (parseFloat(o.total_net) || 0);
-  }
+  const topClients = Array.from(byContact.values())
+    .sort((a, b) => b.total - a.total)
+    .slice(0, 15)
+    .map((c) => ({ ...c, pct: totalOrdersHT > 0 ? c.total / totalOrdersHT : 0 }));
+
+  // Comparison with the same months one year earlier
+  const sumNet = (xs: { total_net: string }[]) => xs.reduce((s, x) => s + (parseFloat(x.total_net) || 0), 0);
+  const paidNet = (xs: BexioInvoice[]) => sumNet(xs.filter((i) => getInvoicePaymentStatus(i) === "Payée"));
+
+  const prevOrdTotal = sumNet(prevYearOrders);
+  const curOrdTotal = totalOrdersHT;
+  const prevInvTotal = sumNet(prevYearInvoices);
+  const curInvTotal = totalInvoicesHT;
+  const prevPaid = paidNet(prevYearInvoices);
+  const curPaid = paidHT;
+
+  const groupTotals = (xs: BexioOrder[]) => {
+    const out: Record<string, number> = {};
+    for (const o of xs) {
+      const group = classifyClientGroup(contactCache.get(o.contact_id) ?? "");
+      out[group] = (out[group] ?? 0) + (parseFloat(o.total_net) || 0);
+    }
+    return out;
+  };
+  const prevClientGroups = groupTotals(prevYearOrders);
+  const curClientGroups = groupTotals(orders);
 
   const allGroups = Array.from(new Set([
     ...Object.keys(prevClientGroups),
@@ -150,7 +146,8 @@ async function buildAnalytics(year: number) {
   ])).sort();
 
   return {
-    year,
+    from,
+    to,
     totalOrdersHT,
     totalInvoicesHT,
     orderCount: orders.length,
@@ -159,21 +156,19 @@ async function buildAnalytics(year: number) {
     unpaidHT,
     statusGroups,
     clientGroupsSorted,
+    topClients,
     ecartOrdresFactures: totalOrdersHT - totalInvoicesHT,
     comparison: {
-      period: `01/01 – ${String(now.getDate()).padStart(2, "0")}/${String(now.getMonth() + 1).padStart(2, "0")}`,
-      prevYear: year - 1,
-      curYear: year,
+      prevLabel: `${formatMonth(prevFrom)} – ${formatMonth(prevTo)}`,
+      curLabel: `${formatMonth(from)} – ${formatMonth(to)}`,
       prevOrdTotal,
       curOrdTotal,
       prevInvTotal,
       curInvTotal,
       prevPaid,
       curPaid,
-      prevUnpaid,
-      curUnpaid,
-      prevOrdCount: prevYearOrders.length,
-      curOrdCount: curYearOrders.length,
+      prevUnpaid: prevInvTotal - prevPaid,
+      curUnpaid: curInvTotal - curPaid,
       allGroups,
       prevClientGroups,
       curClientGroups,
@@ -195,38 +190,71 @@ function DeltaBadge({ prev, cur }: { prev: number; cur: number }) {
 export default async function AnalyticsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ year?: string }>;
+  searchParams: Promise<{ from?: string; to?: string; year?: string }>;
 }) {
   const sp = await searchParams;
-  const year = parseInt(sp.year ?? "") || new Date().getFullYear() - 1;
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const yearParam = parseInt(sp.year ?? "");
+  const defaultYear = yearParam || now.getFullYear() - 1;
+
+  let from = sp.from && MONTH_RE.test(sp.from) ? sp.from : `${defaultYear}-01`;
+  let to = sp.to && MONTH_RE.test(sp.to) ? sp.to : `${defaultYear}-12`;
+  if (from > to) [from, to] = [to, from];
 
   let data: Awaited<ReturnType<typeof buildAnalytics>> | null = null;
   let error = "";
   try {
-    data = await buildAnalytics(year);
+    data = await buildAnalytics(from, to);
   } catch (e: any) {
     error = e.message;
   }
 
   const availableYears = [2024, 2025, 2026];
+  const periodLabel = `${formatMonth(from)} – ${formatMonth(to)}`;
 
   return (
     <div className="flex flex-col h-full">
       {/* Page header */}
-      <div className="bg-white border-b border-slate-200 px-8 py-5 flex items-center justify-between">
+      <div className="bg-white border-b border-slate-200 px-8 py-5 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-lg font-bold text-slate-900">Analyse</h1>
           <p className="text-sm text-slate-400 mt-0.5">Vue d'ensemble des ventes et paiements</p>
         </div>
-        <div className="flex items-center gap-1">
-          {availableYears.map((y) => (
-            <a key={y} href={`/analytics?year=${y}`}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                y === year ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
-              }`}>
-              {y}
+        <div className="flex flex-wrap items-center gap-4">
+          <form action="/analytics" method="get" className="flex items-end gap-2">
+            <label className="text-xs text-slate-400 flex flex-col gap-1">
+              Du
+              <input type="month" name="from" defaultValue={from} max={currentMonth}
+                className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-slate-900" />
+            </label>
+            <label className="text-xs text-slate-400 flex flex-col gap-1">
+              Au
+              <input type="month" name="to" defaultValue={to} max={currentMonth}
+                className="border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-slate-900" />
+            </label>
+            <button type="submit"
+              className="px-3 py-1.5 rounded-lg text-sm font-medium bg-slate-900 text-white hover:bg-slate-700 transition-colors">
+              Appliquer
+            </button>
+          </form>
+          <div className="flex items-center gap-1">
+            {availableYears.map((y) => {
+              const active = from === `${y}-01` && to === `${y}-12`;
+              return (
+                <a key={y} href={`/analytics?from=${y}-01&to=${y}-12`}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    active ? "bg-slate-900 text-white" : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+                  }`}>
+                  {y}
+                </a>
+              );
+            })}
+            <a href={`/analytics?from=2024-05&to=${currentMonth}`}
+              className="px-3 py-1.5 rounded-lg text-sm font-medium text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-colors">
+              Tout
             </a>
-          ))}
+          </div>
         </div>
       </div>
 
@@ -242,11 +270,11 @@ export default async function AnalyticsPage({
           <>
             {/* 1. Vue d'ensemble */}
             <section>
-              <SectionTitle num="1" title={`Vue d'ensemble — ${data.year}`} />
+              <SectionTitle num="1" title={`Vue d'ensemble — ${periodLabel}`} />
               <div className="grid grid-cols-4 gap-3 mb-3">
                 <StatCard label="Total ordres" value={CHF(data.totalOrdersHT)} sub={`${data.orderCount} documents`} />
                 <StatCard label="Total factures" value={CHF(data.totalInvoicesHT)} sub={`${data.invoiceCount} documents`} />
-                <StatCard label="Montant encaissé" value={CHF(data.paidHT)} sub={`${((data.paidHT / data.totalInvoicesHT) * 100).toFixed(1)}% du facturé`} accent="emerald" />
+                <StatCard label="Montant encaissé" value={CHF(data.paidHT)} sub={`${((data.totalInvoicesHT > 0 ? (data.paidHT / data.totalInvoicesHT) * 100 : 0)).toFixed(1)}% du facturé`} accent="emerald" />
                 <StatCard label="Solde non encaissé" value={CHF(data.unpaidHT)} sub="En suspens + partiel" accent={data.unpaidHT > 50000 ? "red" : "slate"} />
               </div>
               <div className="grid grid-cols-5 gap-4">
@@ -286,7 +314,7 @@ export default async function AnalyticsPage({
 
             {/* 2. Groupes clients */}
             <section>
-              <SectionTitle num="2" title={`Répartition par groupe client — ${data.year}`} />
+              <SectionTitle num="2" title={`Répartition par groupe client — ${periodLabel}`} />
               <div className="grid grid-cols-5 gap-4">
                 <div className="col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
                   <table className="w-full text-sm">
@@ -332,12 +360,44 @@ export default async function AnalyticsPage({
               </div>
             </section>
 
-            {/* 3. Comparaison */}
+            {/* Meilleurs clients */}
+            <section>
+              <SectionTitle num="3" title={`Meilleurs clients — ${periodLabel}`} sub="Classés par chiffre d'affaires (ordres HT)" />
+              <div className="bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
+                <table className="w-full text-sm">
+                  <thead className="border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wide">
+                    <tr>
+                      <th className="text-left px-5 py-3 font-semibold w-8">#</th>
+                      <th className="text-left px-5 py-3 font-semibold">Client</th>
+                      <th className="text-right px-5 py-3 font-semibold">Ordres</th>
+                      <th className="text-right px-5 py-3 font-semibold">CA HT</th>
+                      <th className="text-right px-5 py-3 font-semibold w-48">Part</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.topClients.length === 0 && (
+                      <tr><td colSpan={5} className="px-5 py-6 text-center text-slate-400">Aucun ordre sur cette période</td></tr>
+                    )}
+                    {data.topClients.map((c, i) => (
+                      <tr key={c.name + i} className="border-b border-slate-50 last:border-0">
+                        <td className="px-5 py-3 text-slate-300 text-xs font-mono">{i + 1}</td>
+                        <td className="px-5 py-3 font-medium text-slate-900">{c.name || "Inconnu"}</td>
+                        <td className="px-5 py-3 text-right text-slate-500">{c.count}</td>
+                        <td className="px-5 py-3 text-right font-bold text-slate-900 tabular-nums">{CHF(c.total)}</td>
+                        <td className="px-5 py-3 text-right text-slate-600 font-semibold tabular-nums text-xs">{(c.pct * 100).toFixed(1)}%</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            {/* 4. Comparaison */}
             <section>
               <SectionTitle
-                num="3"
-                title={`Comparaison ${data.comparison.period} : ${data.comparison.prevYear} vs ${data.comparison.curYear}`}
-                sub="Même période calendaire, toutes offres incluses"
+                num="4"
+                title={`Comparaison : ${data.comparison.prevLabel} vs ${data.comparison.curLabel}`}
+                sub="Même période, un an plus tôt"
               />
               <div className="grid grid-cols-5 gap-4 mb-4">
                 <div className="col-span-3 bg-white rounded-xl border border-slate-200 overflow-hidden shadow-sm">
@@ -345,8 +405,8 @@ export default async function AnalyticsPage({
                     <thead className="border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wide">
                       <tr>
                         <th className="text-left px-5 py-3 font-semibold">Indicateur</th>
-                        <th className="text-right px-5 py-3 font-semibold">{data.comparison.prevYear}</th>
-                        <th className="text-right px-5 py-3 font-semibold">{data.comparison.curYear}</th>
+                        <th className="text-right px-5 py-3 font-semibold">{data.comparison.prevLabel}</th>
+                        <th className="text-right px-5 py-3 font-semibold">{data.comparison.curLabel}</th>
                         <th className="text-right px-5 py-3 font-semibold">Évolution</th>
                       </tr>
                     </thead>
@@ -371,12 +431,12 @@ export default async function AnalyticsPage({
                 </div>
                 <div className="col-span-2 bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col">
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide px-5 pt-4 pb-1">
-                    {data.comparison.prevYear} vs {data.comparison.curYear}
+                    {data.comparison.prevLabel} vs {data.comparison.curLabel}
                   </p>
                   <div className="flex-1 px-2 pb-3">
                     <ComparisonBar
-                      prevYear={data.comparison.prevYear}
-                      curYear={data.comparison.curYear}
+                      prevYear={data.comparison.prevLabel}
+                      curYear={data.comparison.curLabel}
                       data={[
                         { label: "Total ordres (HT)", prev: data.comparison.prevOrdTotal, cur: data.comparison.curOrdTotal },
                         { label: "Total factures (HT)", prev: data.comparison.prevInvTotal, cur: data.comparison.curInvTotal },
@@ -396,8 +456,8 @@ export default async function AnalyticsPage({
                   <thead className="border-b border-slate-100 text-xs text-slate-400 uppercase tracking-wide">
                     <tr>
                       <th className="text-left px-5 py-3 font-semibold">Groupe</th>
-                      <th className="text-right px-5 py-3 font-semibold">{data.comparison.prevYear}</th>
-                      <th className="text-right px-5 py-3 font-semibold">{data.comparison.curYear}</th>
+                      <th className="text-right px-5 py-3 font-semibold">{data.comparison.prevLabel}</th>
+                      <th className="text-right px-5 py-3 font-semibold">{data.comparison.curLabel}</th>
                       <th className="text-right px-5 py-3 font-semibold">Évolution</th>
                     </tr>
                   </thead>

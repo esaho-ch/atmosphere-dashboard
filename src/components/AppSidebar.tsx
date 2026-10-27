@@ -2,12 +2,14 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BarChart2, FileText, Settings, LogOut, Layers } from "lucide-react";
+import { BarChart2, FileText, Settings, LogOut, Layers, Package, Box } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV = [
   { href: "/",          label: "Offres",    icon: FileText },
   { href: "/analytics", label: "Analyse",   icon: BarChart2 },
+  { href: "/products",  label: "Produits",  icon: Package },
+  { href: "/visualiser", label: "Visualiseur", icon: Box },
   { href: "/settings",  label: "Paramètres",icon: Settings },
 ];
 

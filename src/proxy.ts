@@ -49,7 +49,13 @@ export async function proxy(req: NextRequest) {
     const newToken = await tryRefresh(session.refresh_token);
     if (newToken) {
       const newCookieHeader = await createSessionCookie({ ...session, access_token: newToken });
-      const response = NextResponse.next();
+      // Also hand the fresh session to the page being rendered right now, otherwise it still
+      // calls Bexio with the expired token (401) until the next request.
+      const freshValue = newCookieHeader.split(";")[0];
+      const requestHeaders = new Headers(req.headers);
+      const cookies = (req.headers.get("cookie") ?? "").split(/;\s*/).filter((c) => c && !c.startsWith("atmo_session="));
+      requestHeaders.set("cookie", [...cookies, freshValue].join("; "));
+      const response = NextResponse.next({ request: { headers: requestHeaders } });
       response.headers.set("Set-Cookie", newCookieHeader);
       return response;
     }
